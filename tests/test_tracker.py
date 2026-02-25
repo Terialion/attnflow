@@ -20,6 +20,17 @@ class DummyModel(nn.Module):
         return self.fc(x)
 
 
+class NoAttentionModel(nn.Module):
+    """Model without attention-like module names for edge-case testing."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.proj = nn.Linear(64, 64)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.proj(x)
+
+
 class TestAttentionTracker:
     """Tests for AttentionTracker."""
     
@@ -177,3 +188,20 @@ class TestAttentionTracker:
                 seq_lengths = [s.sequence_length for s in snapshots]
                 # Should have 3 snapshots from 3 forward passes
                 assert len(snapshots) == 3
+
+    def test_no_attention_layers_registers_no_hooks(self) -> None:
+        """Test no hooks are marked as registered for non-attention model."""
+        model = NoAttentionModel()
+        tracker = AttentionTracker(model, enable_logging=False)
+
+        tracker.register_hooks()
+
+        assert not tracker._hooks_registered
+
+    def test_context_manager_raises_without_attention_layers(self) -> None:
+        """Test context manager raises when no attention hooks can be registered."""
+        model = NoAttentionModel()
+
+        with pytest.raises(RuntimeError):
+            with AttentionTracker(model, enable_logging=False):
+                pass

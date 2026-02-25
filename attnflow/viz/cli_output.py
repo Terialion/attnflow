@@ -1,6 +1,5 @@
 """CLI output utilities for memory statistics visualization."""
 
-from typing import Dict, List
 from attnflow.core.memory_stats import MemoryStats
 from attnflow.utils.constants import (
     TABLE_SEPARATOR_WIDTH,
@@ -109,5 +108,10 @@ def print_all_timelines(stats: MemoryStats) -> None:
     Args:
         stats: MemoryStats instance
     """
-    for layer_name in stats.get_all_layers():
+    layers = stats.get_all_layers()
+    if not layers:
+        print("No memory statistics available")
+        return
+
+    for layer_name in layers:
         print_memory_timeline(stats, layer_name)

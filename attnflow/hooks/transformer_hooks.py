@@ -1,6 +1,6 @@
 """Transformer forward hooks for attention monitoring."""
 
-from typing import Tuple, List, Optional, Any
+from typing import Any, Callable, List, Optional, Tuple
 import torch
 import torch.nn as nn
 
@@ -28,7 +28,7 @@ class TransformerHookManager:
     TODO: Support different attention implementations (flash attention, etc.)
     """
     
-    def __init__(self, model: nn.Module, memory_stats: MemoryStats):
+    def __init__(self, model: nn.Module, memory_stats: MemoryStats) -> None:
         """
         Initialize hook manager.
         
@@ -50,6 +50,10 @@ class TransformerHookManager:
         Returns:
             Number of hooks registered
         """
+        if self._hook_handles:
+            logger.warning("Hooks already registered on this manager instance, skipping")
+            return len(self._hook_handles)
+
         hook_count = 0
         
         for name, module in self.model.named_modules():
@@ -79,8 +83,24 @@ class TransformerHookManager:
         Returns:
             True if layer_name contains any attention keyword
         """
-        name_lower = layer_name.lower()
-        return any(keyword in name_lower for keyword in ATTENTION_LAYER_KEYWORDS)
+        if not layer_name:
+            return False
+
+        module_name = layer_name.lower().split(".")[-1]
+        explicit_names = {
+            "attention",
+            "self_attention",
+            "self_attn",
+            "cross_attn",
+        }
+
+        if module_name in explicit_names:
+            return True
+
+        if module_name.startswith("multiheadattention") or module_name == "multihead":
+            return True
+
+        return module_name in ATTENTION_LAYER_KEYWORDS
     
     @staticmethod
     def _extract_tensor_shape(output: Any) -> Optional[Tuple[int, int, int]]:
@@ -135,7 +155,10 @@ class TransformerHookManager:
         cache_size = batch_size * seq_len * hidden_dim * dtype_bytes
         return cache_size, cache_size
     
-    def _create_hook(self, layer_name: str):
+    def _create_hook(
+        self,
+        layer_name: str,
+    ) -> Callable[[nn.Module, Tuple[Any, ...], Any], None]:
         """
         Create a forward hook function for a specific layer.
         
@@ -145,7 +168,7 @@ class TransformerHookManager:
         Returns:
             Hook function that records memory statistics
         """
-        def hook(module: nn.Module, input: Tuple, output: Any) -> None:
+        def hook(module: nn.Module, input: Tuple[Any, ...], output: Any) -> None:
             """
             Forward hook implementation.
             

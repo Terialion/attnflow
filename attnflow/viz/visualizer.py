@@ -1,6 +1,6 @@
 """Matplotlib-based visualizer for attention memory flow."""
 
-from typing import Optional
+from typing import Any, Optional, Sequence
 import matplotlib.pyplot as plt
 import matplotlib
 
@@ -19,7 +19,7 @@ class Visualizer:
     TODO: Add heatmap visualization for all layers
     """
     
-    def __init__(self, style: str = DEFAULT_PLOT_STYLE):
+    def __init__(self, style: str = DEFAULT_PLOT_STYLE) -> None:
         """
         Initialize visualizer with matplotlib backend and style.
         
@@ -150,8 +150,8 @@ class Visualizer:
     @staticmethod
     def _add_bar_value_labels(
         ax: plt.Axes,
-        bars,
-        values
+        bars: Sequence[Any],
+        values: Sequence[float],
     ) -> None:
         """
         Add value labels on top of bar chart.

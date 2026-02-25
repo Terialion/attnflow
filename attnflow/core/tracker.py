@@ -1,6 +1,7 @@
 """Main attention tracking orchestrator."""
 
-from typing import Optional
+from types import TracebackType
+from typing import Dict, Optional, Type, Union
 import torch.nn as nn
 
 from attnflow.core.memory_stats import MemoryStats
@@ -24,7 +25,7 @@ class AttentionTracker:
     ...     stats = tracker.get_memory_stats()
     """
     
-    def __init__(self, model: nn.Module, enable_logging: bool = True):
+    def __init__(self, model: nn.Module, enable_logging: bool = True) -> None:
         """
         Initialize attention tracker.
         
@@ -57,9 +58,14 @@ class AttentionTracker:
             self._log_warning("Hooks already registered, skipping...")
             return
         
-        self._hook_manager.register_hooks()
+        hook_count = self._hook_manager.register_hooks()
+        if hook_count == 0:
+            self._hooks_registered = False
+            self._log_warning("No attention layers found; no hooks registered")
+            return
+
         self._hooks_registered = True
-        self._log_info("Hooks registered successfully")
+        self._log_info(f"Hooks registered successfully ({hook_count} hooks)")
     
     def unregister_hooks(self) -> None:
         """
@@ -122,7 +128,7 @@ class AttentionTracker:
         """
         return self._memory_stats
     
-    def get_summary(self) -> dict:
+    def get_summary(self) -> Dict[str, Dict[str, Union[float, int]]]:
         """
         Get summary of all memory statistics.
         
@@ -142,7 +148,7 @@ class AttentionTracker:
         if self.enable_logging:
             logger.warning(message)
     
-    def __enter__(self):
+    def __enter__(self) -> "AttentionTracker":
         """
         Context manager entry.
         
@@ -152,7 +158,12 @@ class AttentionTracker:
         self.start_tracking()
         return self
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         """
         Context manager exit.
         

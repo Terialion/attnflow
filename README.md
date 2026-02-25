@@ -55,44 +55,34 @@ with AttentionTracker(model) as tracker:
 
 ```bash
 python demo/simple_demo.py
+python demo/realtime_demo.py
 ```
 
-**演示输出示例：**
+- `realtime_demo.py`（推荐）：实时动态图（每层 timeline + 全局 KV 增长条）
+- `simple_demo.py`：基础追踪 + 静态可视化
+
+> Windows 提示：`simple_demo.py` 默认保存到 `/tmp/...`，在 Windows 上可能报路径错误；建议优先使用 `realtime_demo.py`，或自行修改保存路径。
+
+**真实输出示例（本机运行 `python demo/realtime_demo.py`）：**
 
 ```
-======================================================================
-AttnFlow Demo: Transformer Attention Memory Tracking
-======================================================================
+[2026-02-25 20:47:35 - attnflow.hooks.transformer_hooks - INFO] Successfully registered 2 hooks
 
-[Step 1] Initializing model...
-Model: SimpleTransformerModel
-Total parameters: 1,698,280
-
-[Step 2] Setting up attention tracker...
-Successfully registered 10 hooks
-
-[Step 3] Running forward passes...
-  Processing batch: seq_len=10, batch_size=4... ✓
-  Processing batch: seq_len=20, batch_size=4... ✓
-  Processing batch: seq_len=30, batch_size=4... ✓
-
-[Step 4] Memory Statistics
 ======================================================================
-ATTENTION MEMORY SUMMARY
+                                             ATTENTION MEMORY SUMMARY
 ======================================================================
-Layer Name                     Peak Memory (MB)     Max Seq Len    
+Layer Name                    Peak Memory (MB)    Max Seq Len
 ----------------------------------------------------------------------
-layers.0.self_attention        0.23                 30             
-layers.1.self_attention        0.23                 30             
+layers.0.self_attention       0.07                23
+layers.1.self_attention       0.07                23
 ----------------------------------------------------------------------
-TOTAL                          2.34                
+TOTAL                         0.13
 ======================================================================
 
-[Step 5] Memory Timeline - Generated ✓
-[Step 6] Visualizations - Generated ✓
-
-Demo completed successfully!
+[2026-02-25 20:47:41 - attnflow.hooks.transformer_hooks - INFO] All hooks unregistered
 ```
+
+说明：运行环境可能出现第三方库日志（如 `MMKV`、`libpng warning`），它们不影响 AttnFlow 的 tracking 结果。
 
 ---
 
@@ -371,6 +361,7 @@ attnflow/
 ├── demo/                         # 📚 演示和示例
 │   ├── __init__.py
 │   ├── simple_demo.py           # ⭐ 完整演示脚本
+│   ├── realtime_demo.py         # ⭐ Day2 实时动态图演示
 │   └── attention_model.py       # 演示用的 Transformer 模型
 │
 ├── README.md                     # 📖 项目文档（本文件）
@@ -420,6 +411,66 @@ attnflow/
 | **展示层** | `viz/` | 数据可视化显示 | ↓ |
 | **数据层** | `memory_stats.py` | 数据存储和查询 | ↓ |
 | **辅助层** | `utils/` | 日志、常量等 | PyTorch |
+
+#### 模块边界与依赖约束（推荐遵循）
+
+为了保证可维护性和可扩展性，建议严格遵循以下边界：
+
+- `attnflow.core`：只负责**生命周期管理**与**状态编排**，不直接依赖可视化实现细节。
+- `attnflow.hooks`：只负责**forward 拦截**与**张量信息抽取**，不做展示层逻辑。
+- `attnflow.viz`：只消费 `MemoryStats` 查询接口，不反向依赖 `hooks`。
+- `attnflow.utils`：提供无业务副作用的基础能力（常量、日志）。
+
+边界规则：
+
+1. 单向依赖：`core -> hooks/data -> viz(消费结果)`，避免循环依赖。
+2. `hooks` 与 `viz` 通过 `MemoryStats` 解耦，禁止互相直接调用。
+3. 新功能优先通过新增模块扩展，而不是在 `tracker.py` 中堆叠分支逻辑。
+
+#### 端到端数据流（一次推理）
+
+```text
+用户调用 model.forward(input_ids)
+    ↓
+TransformerHookManager 的 forward hook 被触发
+    ↓
+提取输出张量 shape: (batch, seq_len, hidden_dim)
+    ↓
+估算 K/V cache bytes（K + V）
+    ↓
+MemoryStats.record_snapshot(layer_name, k, v, seq_len)
+    ↓
+MemoryStats 提供 summary / timeline 查询
+    ↓
+CLI 或 Matplotlib 渲染展示
+```
+
+关键数据对象：
+
+- `LayerMemorySnapshot`：单层单时刻记录（时间戳、K/V bytes、seq_len）。
+- `MemoryStats`：按层聚合 snapshot，提供 `get_summary()` 与 `get_memory_timeline()`。
+
+#### 扩展点设计（TODO 对应落位）
+
+以下扩展点已在代码中预留 TODO，推荐按接口化方式推进：
+
+1. **注意力层识别策略扩展**（`hooks/transformer_hooks.py`）
+   - 现状：基于命名规则匹配。
+   - 建议：增加可注入 matcher（函数或策略类），覆盖 FlashAttention / 自定义模块命名。
+
+2. **KV 内存估算策略扩展**（`hooks/transformer_hooks.py`）
+   - 现状：使用通用估算公式。
+   - 建议：为不同 dtype、压缩 cache、分组注意力提供策略实现。
+
+3. **可视化后端扩展**（`viz/visualizer.py`）
+   - 现状：Matplotlib + CLI。
+   - 建议：新增 Plotly/前端流式后端时，保持 `MemoryStats -> renderer` 的单向消费模式。
+
+4. **追踪策略扩展**（`core/tracker.py`）
+   - 现状：统一生命周期管理。
+   - 建议：新增采样率控制、层过滤、阈值告警时，优先在 `core` 编排，不污染 `hooks`/`viz`。
+
+> 最佳实践：新增功能时优先“加模块/策略”，避免修改核心路径已有行为；每个扩展点至少补 1 个单元测试与 1 个边界测试。
 
 ---
 
@@ -928,7 +979,38 @@ with AttentionTracker(model) as tracker:
     print_memory_summary(tracker.get_memory_stats())
 ```
 
-Run demo: `python demo/simple_demo.py`
+Run demo:
+
+```bash
+python demo/simple_demo.py
+python demo/realtime_demo.py
+```
+
+- `realtime_demo.py` (recommended): real-time animation (per-layer timeline + global KV growth bar)
+- `simple_demo.py`: baseline tracking + static visualization
+
+> Windows note: `simple_demo.py` saves figures to `/tmp/...` by default and may fail on Windows. Use `realtime_demo.py` first, or change the save path.
+
+**Real output sample (`python demo/realtime_demo.py`):**
+
+```
+[2026-02-25 20:47:35 - attnflow.hooks.transformer_hooks - INFO] Successfully registered 2 hooks
+
+======================================================================
+                       ATTENTION MEMORY SUMMARY
+======================================================================
+Layer Name                    Peak Memory (MB)    Max Seq Len
+----------------------------------------------------------------------
+layers.0.self_attention       0.07                23
+layers.1.self_attention       0.07                23
+----------------------------------------------------------------------
+TOTAL                         0.13
+======================================================================
+
+[2026-02-25 20:47:41 - attnflow.hooks.transformer_hooks - INFO] All hooks unregistered
+```
+
+Note: You may see third-party logs (for example `MMKV` or `libpng warning`) in your environment. They do not affect AttnFlow tracking results.
 
 For detailed documentation, see the Chinese version above.
 

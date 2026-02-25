@@ -87,6 +87,19 @@ class TestTransformerHookManager:
         
         manager.unregister_hooks()
         assert len(manager._hook_handles) == 0
+
+    def test_register_hooks_idempotent(self) -> None:
+        """Test repeated register_hooks does not duplicate handles."""
+        model = SimpleModel()
+        stats = MemoryStats()
+        manager = TransformerHookManager(model, stats)
+
+        first_count = manager.register_hooks()
+        second_count = manager.register_hooks()
+
+        assert first_count == 2
+        assert second_count == 2
+        assert len(manager._hook_handles) == 2
     
     def test_extract_tensor_shape_from_tensor(self) -> None:
         """Test extracting shape from tensor output."""

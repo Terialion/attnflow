@@ -97,6 +97,13 @@ class TestCliOutput:
         
         assert "Memory Timeline for layer_0" in output
         assert "Memory Timeline for layer_1" in output
+
+    def test_print_all_timelines_empty(self) -> None:
+        """Test printing all timelines when there is no data."""
+        stats = MemoryStats()
+        output = self._capture_output(print_all_timelines, stats)
+
+        assert "No memory statistics available" in output
     
     def test_summary_formatting(self) -> None:
         """Test that summary is properly formatted."""

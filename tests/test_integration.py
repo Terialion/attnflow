@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from attnflow import AttentionTracker
-from attnflow.viz import Visualizer
+from attnflow.viz import RealtimeMemoryDashboard, Visualizer
 from demo.attention_model import SimpleTransformerModel
 
 
@@ -174,6 +174,29 @@ class TestIntegration:
             for layer in stats.get_all_layers():
                 snapshots = stats.get_snapshots(layer)
                 assert len(snapshots) == 3
+
+    @pytest.mark.filterwarnings("ignore:Animation was deleted without rendering anything")
+    def test_realtime_dashboard_updates_during_tracking(self) -> None:
+        """Test realtime dashboard updates from live tracking snapshots."""
+        model = SimpleTransformerModel(num_layers=1)
+
+        with AttentionTracker(model, enable_logging=False) as tracker:
+            stats = tracker.get_memory_stats()
+            dashboard = RealtimeMemoryDashboard(refresh_interval_ms=100)
+            _fig, _animation = dashboard.create_animation(stats)
+
+            widths = []
+            with torch.no_grad():
+                for seq_len in [8, 16, 24]:
+                    x = torch.randint(0, 1000, (2, seq_len))
+                    model(x)
+                    dashboard.update_from_stats(stats)
+                    assert dashboard._total_bar is not None
+                    widths.append(dashboard._total_bar[0].get_width())
+
+            assert len(stats.get_all_layers()) > 0
+            assert max(widths) > 0.0
+            assert widths == sorted(widths)
     
     @pytest.mark.slow
     def test_extended_sequence_tracking(self) -> None:

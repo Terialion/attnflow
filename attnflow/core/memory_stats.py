@@ -47,7 +47,7 @@ class MemoryStats:
     def __init__(self):
         """Initialize memory statistics tracker."""
         self._snapshots: Dict[str, List[LayerMemorySnapshot]] = {}
-        self._start_time = time.time()
+        self._start_time = time.perf_counter()
         # Cache for computed summaries to avoid redundant calculations
         self._summary_cache: Dict = {}
         self._cache_valid = False
@@ -70,10 +70,15 @@ class MemoryStats:
         """
         if layer_name not in self._snapshots:
             self._snapshots[layer_name] = []
+
+        timestamp = time.perf_counter() - self._start_time
+        existing = self._snapshots[layer_name]
+        if existing and timestamp <= existing[-1].timestamp:
+            timestamp = existing[-1].timestamp + 1e-9
         
         snapshot = LayerMemorySnapshot(
             layer_name=layer_name,
-            timestamp=time.time() - self._start_time,
+            timestamp=timestamp,
             k_cache_size=k_cache_size,
             v_cache_size=v_cache_size,
             sequence_length=sequence_length
