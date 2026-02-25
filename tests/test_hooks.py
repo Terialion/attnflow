@@ -35,6 +35,23 @@ class SimpleModel(nn.Module):
         return self.linear(x)
 
 
+class NamingCompatModel(nn.Module):
+    """Model using common naming styles from mainstream Transformer codebases."""
+
+    def __init__(self):
+        super().__init__()
+        self.attn = SimpleAttentionModule()
+        self.c_attn = SimpleAttentionModule()
+        self.SelfAttention = SimpleAttentionModule()
+        self.linear = nn.Linear(64, 64)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.attn(x)
+        x = self.c_attn(x)
+        x = self.SelfAttention(x)
+        return self.linear(x)
+
+
 class TestTransformerHookManager:
     """Tests for TransformerHookManager."""
     
@@ -59,10 +76,29 @@ class TestTransformerHookManager:
         assert manager._is_attention_layer("cross_attn")
         assert manager._is_attention_layer("attention")
         assert manager._is_attention_layer("ATTENTION")  # case-insensitive
+        assert manager._is_attention_layer("attn")
+        assert manager._is_attention_layer("c_attn")
+        assert manager._is_attention_layer("SelfAttention")
         
         # Should not detect non-attention layers
         assert not manager._is_attention_layer("linear")
         assert not manager._is_attention_layer("embeddings")
+        assert not manager._is_attention_layer("attention_mask")
+        assert not manager._is_attention_layer("attn_dropout")
+        assert not manager._is_attention_layer("q_proj")
+
+    def test_register_hooks_mainstream_naming_compatibility(self) -> None:
+        """Test registration for GPT/BERT/LLaMA-like naming variants."""
+        model = NamingCompatModel()
+        stats = MemoryStats()
+        manager = TransformerHookManager(model, stats)
+
+        hook_count = manager.register_hooks()
+
+        assert hook_count == 3
+        assert len(manager._hook_handles) == 3
+
+        manager.unregister_hooks()
     
     def test_register_hooks(self) -> None:
         """Test hook registration."""

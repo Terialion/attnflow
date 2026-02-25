@@ -1,6 +1,7 @@
 """Transformer forward hooks for attention monitoring."""
 
 from typing import Any, Callable, List, Optional, Tuple
+import re
 import torch
 import torch.nn as nn
 
@@ -86,12 +87,17 @@ class TransformerHookManager:
         if not layer_name:
             return False
 
-        module_name = layer_name.lower().split(".")[-1]
+        module_name = self._normalize_module_name(layer_name)
         explicit_names = {
             "attention",
             "self_attention",
             "self_attn",
             "cross_attn",
+            "attn",
+            "c_attn",
+            "multi_head_attention",
+            "multihead_attention",
+            "multiheadattention",
         }
 
         if module_name in explicit_names:
@@ -101,6 +107,20 @@ class TransformerHookManager:
             return True
 
         return module_name in ATTENTION_LAYER_KEYWORDS
+
+    @staticmethod
+    def _normalize_module_name(layer_name: str) -> str:
+        """Normalize module name for robust, conservative matching.
+
+        Args:
+            layer_name: Full named_modules path.
+
+        Returns:
+            Lower snake_case name of the final module token.
+        """
+        module_name = layer_name.split(".")[-1]
+        module_name = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", module_name)
+        return module_name.lower()
     
     @staticmethod
     def _extract_tensor_shape(output: Any) -> Optional[Tuple[int, int, int]]:
