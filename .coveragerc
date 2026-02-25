@@ -1,0 +1,58 @@
+# Coverage.py configuration for AttnFlow
+
+[run]
+# Source code to measure coverage
+source = attnflow
+
+# Files to omit from coverage
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */site-packages/*
+    setup.py
+
+# Python files to include
+branch = True
+
+[report]
+# Coverage report configuration
+
+# Minimum coverage percentage required to pass
+fail_under = 75
+
+# Files to exclude from report
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+    
+    # Defensive programming
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Non-executable code
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    @abstract
+    
+    # Logging
+    logger.debug
+    logger.info
+    
+    # Type checking
+    @overload
+
+# Precision for coverage percentages
+precision = 2
+
+# Sort report by coverage
+sort = Cover
+
+[html]
+# HTML report directory
+directory = htmlcov
+
+[xml]
+# XML report output
+output = coverage.xml
